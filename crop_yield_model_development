@@ -1,0 +1,148 @@
+# ============================================================
+# Crop Yield Model — Predictor Selection
+# ============================================================
+#
+# Purpose:
+#   Identify a parsimonious combination of environmental
+#   predictors for the crop yield model using best-subset
+#   regression, followed by linear and mixed-effects modeling.
+#
+# Data availability:
+#   Farm-level crop yield data used for model calibration are
+#   not included in this repository due to data confidentiality.
+#
+# Inputs:
+#   - Farm-level observed crop yield data
+#   - Environmental predictors considered for model calibration
+#
+# Outputs:
+#   - Selected predictor combinations
+#   - Linear and linear mixed-effects model results
+#   - Model performance statistics
+#
+# ============================================================
+
+remove(list=ls()) 
+graphics.off()
+options(scipen = 999)
+
+# PACKAGES ====================================================
+
+pacman::p_load(tidyverse, leaps, lme4, performance)
+
+# LOAD AND PREPARE DATA ======================================
+
+# The dataset should contain farm-level crop yield and
+# environmental predictor data required for model calibration
+
+# Expected structure:
+# observed_yield | var1 | var2 | ... | varN
+
+d <- read.csv2("PATH_TO_PRIVATE_DATA/data.csv", sep = ";", dec = ",")
+d <- na.omit(d)
+
+# PREPARE MODEL DATA =========================================
+
+model_data <- d %>%
+  dplyr::select(
+    id,
+    year,
+    yield,
+    climate...
+  )
+
+# Standardize the response variable and environmental
+# predictors before best-subset regression.
+# Farm ID and year are excluded from standardization.
+
+model_data_scaled <- model_data %>%
+  mutate(
+    across(
+      -c(id, year),
+      ~ as.numeric(scale(.x))
+    )
+  )
+glimpse(model_data_scaled)
+
+# PREDICTOR SELECTION ========================================
+
+# Evaluate alternative combinations of environmental predictors
+# using best-subset regression. Models are compared using
+# adjusted R-squared to identify a parsimonious predictor set
+
+predictor_selection <- leaps::regsubsets(
+  yield ~ .,
+  data = model_data_scaled,
+  nvmax = 8
+)
+
+
+# EXAMINE ALTERNATIVE MODEL COMBINATIONS =====================
+
+# Visualize model combinations and adjusted R-squared
+# to identify the selected predictor combination.
+
+plot(predictor_selection, scale = "adjr2", ylim = c(0, 1)) 
+
+# Extract model selection results to document alternative
+# predictor combinations considered during model selection
+
+# These results are used to report alternative model
+# combinations in the Supplementary Material
+
+reg_summary <- summary(predictor_selection)
+
+which_models <- reg_summary$which
+
+combinations <- apply(
+  which_models[, -1, drop = FALSE],
+  1,
+  function(x) {
+    paste(
+      colnames(which_models)[-1][x],
+      collapse = " + "
+    )
+  }
+)
+
+combinations
+
+model_results <- data.frame(
+  n_predictors = rowSums(which_models[, -1, drop = FALSE]),
+  combination = combinations,
+  adj_r2 = reg_summary$adjr2
+) %>%
+  arrange(desc(adj_r2))
+
+model_results
+
+# FIT SELECTED LINEAR MODEL =================================
+
+# Standardization was applied only during predictor selection. 
+# The final linear and mixed-effects models were fitted using predictors 
+# in their original units to retain coefficients with direct real-world interpretation.
+
+yield_lm <- lm(
+  yield ~ EVIqjan + EVIqmar +
+    DLSTdez + DLSTjan + DLSTfev +
+    VPDdez + NDDout + NDDmar,
+  data = model_data
+)
+summary(yield_lm) 
+
+# FIT LINEAR MIXED-EFFECTS MODEL ==============================
+
+yield_lmmix <- lmer(
+  yield ~ EVIqjan + EVIqmar +
+    DLSTdez + DLSTjan + DLSTfev +
+    VPDdez + NDDout + NDDmar +
+    (1 | id),
+  data = model_data,
+  na.action = "na.fail"
+)
+summary(yield_lmmix)
+
+performance::r2_nakagawa(yield_lmmix)
+
+
+
