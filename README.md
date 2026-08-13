@@ -1,4 +1,4 @@
-# forest-agriculture-productivity-2026
+# forest-agriculture-yield-2026
 
 **Repository status:** In development
 
