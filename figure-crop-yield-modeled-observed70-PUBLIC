@@ -1,0 +1,101 @@
+# ============================================================
+# Crop Yield Model — Comparison with Observed Crop Yield
+# ============================================================
+#
+# Purpose:
+#   Compare crop yield predicted by the model with observed
+#   crop yield for a randomly selected subset (~70%) of the
+#   observed data. The model was fitted using the full dataset.
+#
+# Data availability:
+#   Farm-level observed yield data are not included in this
+#   repository due to data confidentiality.
+#
+# Inputs:
+#   - Observed crop yield data
+#   - Environmental predictors used in the crop yield model
+#
+# Outputs:
+#   - Model performance figure
+#
+# Article:
+#   Rebelatto et al. (2026)
+#
+# ============================================================
+
+remove(list=ls()) 
+graphics.off()
+options(scipen = 999)
+
+# PACKAGES ====================================================
+
+pacman::p_load(tidyverse)
+
+# LOAD AND PREPARE DATA ======================================
+
+# The dataset should contain farm-level crop yield and
+# environmental predictor data required for model calibration
+# observed_yield | var1 | var2 | ... | varN
+
+d <- read.csv2("PATH_TO_PRIVATE_DATA/data.csv", sep = ";", dec = ",")
+glimpse(d)
+
+d <- rename(d, id = id_ipam)
+d <- na.omit(d)
+
+# SELECT OBSERVATIONS FOR MODEL COMPARISON ===================
+# Randomly select 44 observations (~70% of the observed
+# dataset) for comparison between modeled and observed crop yield
+# Observations represent different farm-year combinations
+
+rand_d <- unique(d$id)
+rand_d <- sample(rand_d, size = 44)
+rand_d <- as.data.frame(rand_d)
+colnames(rand_d)[1] <- "id"
+
+rand_d <- merge(d, rand_d, by = "id")
+
+glimpse(rand_d)
+
+# FIT CROP YIELD MODEL ========================================
+mf_rand <- lme4::lmer(yield_t ~ EVIqjan + EVIqmar +
+                        DLSTdez + DLSTjan + DLSTfev +
+                        VPDdez +
+                        NDDout + NDDmar + 
+                        (1|id), 
+                      data = d, na.action = "na.fail")
+
+summary(mf_rand)
+
+# PREDICT SELECTED OBSERVATIONS ==============================
+rand_d$predict_tmax <- predict(mf_rand, rand_d)
+
+# Organize predicted and observed crop yield data for plotting
+dpredict_mf_rand <- rand_d %>%
+  group_by(year) %>%
+  summarise(observed_crop = round(mean(yield_t, na.rm = T), 2),
+            predicted_crop = round(mean(predict_tmax, na.rm = T), 2))
+glimpse(dpredict_mf_rand)
+
+dpredict <- dpredict_mf_rand %>%
+  gather(var, valores, 2:3, -year)
+
+cols <- c("observed_crop"="black",
+          "predicted_crop"="#fc6123")
+
+p <- dpredict %>%
+  mutate(across(var, ~ factor(.x, levels = c("observed_crop","predicted_crop")))) %>%
+  ggplot(aes(x = as.numeric(year), y = valores, colour = var)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = seq(2010, 2017, by = 1)) +
+  scale_colour_manual(labels=c("Modeled", "Observed"), values =cols)+
+  labs(y = "Crop yield (t ha)", x = "Year", colour = "Data Source") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+ggsave(
+  "results/figures/crop_yield_modeled_observed30.png",
+  dpi = 300
+)
