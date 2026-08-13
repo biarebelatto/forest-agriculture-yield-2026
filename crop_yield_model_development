@@ -39,7 +39,6 @@ pacman::p_load(tidyverse, leaps, lme4, performance)
 # observed_yield | var1 | var2 | ... | varN
 
 d <- read.csv2("PATH_TO_PRIVATE_DATA/data.csv", sep = ";", dec = ",")
-d <- na.omit(d)
 
 # PREPARE MODEL DATA =========================================
 
