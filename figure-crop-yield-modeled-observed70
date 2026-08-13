@@ -18,9 +18,6 @@
 # Outputs:
 #   - Model performance figure
 #
-# Article:
-#   Rebelatto et al. (2026)
-#
 # ============================================================
 
 remove(list=ls()) 
