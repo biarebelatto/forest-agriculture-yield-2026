@@ -37,9 +37,6 @@ pacman::p_load(tidyverse)
 d <- read.csv2("PATH_TO_PRIVATE_DATA/data.csv", sep = ";", dec = ",")
 glimpse(d)
 
-d <- rename(d, id = id)
-d <- na.omit(d)
-
 # SELECT OBSERVATIONS FOR MODEL COMPARISON ===================
 # Randomly select 44 observations (~70% of the observed
 # dataset) for comparison between modeled and observed crop yield
