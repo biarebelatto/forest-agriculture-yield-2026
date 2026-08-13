@@ -4,7 +4,7 @@
 #
 # Purpose:
 #   Compare crop yield predicted by the model with observed
-#   crop yield for a randomly selected subset (~70%) of the
+#   crop yield for a randomly selected subset of the
 #   observed data. The model was fitted using the full dataset.
 #
 # Data availability:
@@ -40,7 +40,7 @@ pacman::p_load(tidyverse)
 d <- read.csv2("PATH_TO_PRIVATE_DATA/data.csv", sep = ";", dec = ",")
 glimpse(d)
 
-d <- rename(d, id = id_ipam)
+d <- rename(d, id = id)
 d <- na.omit(d)
 
 # SELECT OBSERVATIONS FOR MODEL COMPARISON ===================
@@ -49,7 +49,7 @@ d <- na.omit(d)
 # Observations represent different farm-year combinations
 
 rand_d <- unique(d$id)
-rand_d <- sample(rand_d, size = 44)
+rand_d <- sample(rand_d, size = n)
 rand_d <- as.data.frame(rand_d)
 colnames(rand_d)[1] <- "id"
 
@@ -96,6 +96,6 @@ p <- dpredict %>%
         panel.grid.minor = element_blank())
 
 ggsave(
-  "results/figures/crop_yield_modeled_observed30.png",
+  "results/figures/crop_yield_modeled_observed.png",
   dpi = 300
 )
