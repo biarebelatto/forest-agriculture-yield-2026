@@ -1,0 +1,171 @@
+# ============================================================
+# ANALYSES
+# ============================================================
+# Crop Yield Model — Cross validation
+# ============================================================
+#
+# Purpose:
+#   Evaluate the predictive performance of the crop yield
+#   model using leave-one-out cross-validation (LOOCV) and
+#   leave-one-farm-out cross-validation (LOFOCV).
+#
+# Data availability:
+#   Farm-level crop yield data used for model calibration and
+#   validation are not included in this repository due to data
+#   confidentiality.
+#
+# Inputs:
+#   - Farm-level observed crop yield data
+#   - Environmental predictors used in the crop yield model
+#   - Farm identifiers
+#
+# Outputs:
+#   - In-sample model performance metrics
+#   - LOOCV performance metrics
+#   - LOFOCV performance metrics
+#
+# ============================================================
+
+remove(list=ls()) 
+graphics.off()
+options(scipen = 999)
+
+# PACKAGES ====================================================
+
+pacman::p_load(tidyverse, caret)
+
+# LOAD AND PREPARE DATA ======================================
+
+# Expected structure:
+# observed_yield | var1 | var2 | ... | varN
+
+d <- read.csv2("PATH_TO_PRIVATE_DATA/data.csv", sep = ";", dec = ",") %>%
+    dplyr::select(yield_t, EVIqjan, EVIqmar,
+                DLSTdez, DLSTjan, DLSTfev,
+                VPDdez,
+                NDDout, NDDmar, id, year) %>%
+    na.omit() %>%
+    arrange(id)
+
+# FIT LINEAR MODEL ===========================================
+
+yield_lm <- lm(yield_t ~ EVIqjan + EVIqmar +
+                DLSTdez + DLSTjan + DLSTfev +
+                VPDdez +
+                NDDout + NDDmar,
+            data = d); summary(yield_lm)
+
+# IN-SAMPLE PERFORMANCE ====================================== 
+
+errors <- residuals(yield_lm)
+
+mse_lm <- mean((errors)^2, na.rm = T); mse_lm 
+mae_lm <- mean(abs(errors), na.rm = T); mae_lm
+rmse_lm <- sqrt(mse_lm); rmse_lm
+r2_lm <- summary(yield_lm)$r.squared; r2_lm
+adj_r2_lm <- summary(yield_lm)$adj.r.squared; adj_r2_lm
+
+# LEAVE-ONE-OUT CROSS-VALIDATION =============================
+
+ctrl <- trainControl(method = "LOOCV")
+
+loocv <- train(yield_t ~ EVIqjan + EVIqmar +
+                DLSTdez + DLSTjan + DLSTfev +
+                VPDdez +
+                NDDout + NDDmar,
+            data = d, method = "lm", trControl = ctrl)
+loocv
+
+loocv_results <- loocv$results
+rmse_loocv <- loocv_results$RMSE; rmse_loocv
+mae_loocv <- loocv_results$MAE; mae_loocv
+r2_loocv <- loocv_results$Rsquared; r2_loocv
+adj_r2_loocv <- 1 - (1 - r2_loocv) * ((nrow(d) - 1) / (nrow(d) - length(coef(yield_lm)) - 1)); adj_r2_loocv
+
+# LEAVE-ONE-FARM-OUT CROSS-VALIDATION ========================
+
+farms <- unique(d$id)
+n_farms <- length(farms)
+
+predictions <- vector("list", n_farms)
+observations <- vector("list", n_farms)
+
+names(predictions) <- farms
+names(observations) <- farms
+
+for (i in seq_along(farms)) {
+
+  farm_i <- farms[i]
+
+  # Training set: all farms except the held-out farm
+  train_d <- d %>% 
+    filter(id != farm_i)
+
+  # Test set: all available observations from the held-out farm
+  test_d <- d %>% 
+    filter(id == farm_i)
+
+  # Fit model
+  lm_lofo <- lm(yield_t ~ EVIqjan + EVIqmar +
+                DLSTdez + DLSTjan + DLSTfev +
+                VPDdez +
+                NDDout + NDDmar,
+                data = train_d)
+
+  # Predict crop yield for the held-out farm
+  preds <- predict(lm_lofo, newdata = test_d)
+
+  predictions[[i]] <- preds
+  observations[[i]] <- test_d$yield_t
+}
+
+# LOFOCV PERFORMANCE =========================================
+pred_vec <- unlist(predictions)
+obs_vec  <- unlist(observations)
+
+any(is.na(pred_vec))
+any(is.na(obs_vec))
+
+rmse_lofo <- sqrt(mean((obs_vec - pred_vec)^2)); rmse_lofo
+mae_lofo <- mean(abs(obs_vec - pred_vec)); mae_lofo
+
+sst <- sum((obs_vec - mean(obs_vec))^2)
+sse <- sum((obs_vec - pred_vec)^2)
+r2_lofo <- 1 - (sse / sst); r2_lofo
+
+n <- length(obs_vec)
+p <- 8
+
+r2_adj_lofo <- 1 - (1 - r2_lofo) * ((n - 1) / (n - p - 1))
+
+r2_adj_lofo
+
+performance_results <- tibble(
+  evaluation = c(
+    "In-sample",
+    "LOOCV",
+    "LOFOCV"
+  ),
+  RMSE = c(
+    rmse_lm,
+    rmse_loocv,
+    rmse_lofo
+  ),
+  MAE = c(
+    mae_lm,
+    mae_loocv,
+    mae_lofo
+  ),
+  R2 = c(
+    r2_lm,
+    r2_loocv,
+    r2_lofo
+  ),
+  adjR2 = c(
+    adj_r2_lm,
+    adj_r2_loocv,
+    r2_adj_lofo
+  )
+)
+
+performance_results
