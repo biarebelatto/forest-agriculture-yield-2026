@@ -1,0 +1,63 @@
+# ============================================================
+# FIGURE
+# ============================================================
+# Crop Yield Model — Forest plot
+# ============================================================
+#
+# Purpose:
+#   Generate a forest plot showing standardized effects of
+#   environmental predictors on crop yield from the final
+#   linear mixed-effects model.
+#
+# Data availability:
+#   Farm-level crop yield data are not included in this
+#   repository due to data confidentiality.
+#
+# Inputs:
+#   - Farm-level observed crop yield data
+#   - Environmental predictors used in the crop yield model
+#
+# Outputs:
+#   - Forest plot of standardized model coefficients
+#
+# ============================================================
+
+remove(list=ls()) 
+graphics.off()
+options(scipen = 999)
+
+# PACKAGES ====================================================
+
+pacman::p_load(dplyr, lme4, sjPlot, ggplot2)
+
+
+# LOAD AND PREPARE DATA ======================================
+
+# The dataset should contain farm-level crop yield and
+# environmental predictor data required for model calibration
+# observed_yield | var1 | var2 | ... | varN
+
+d <- read.csv2("PATH_TO_PRIVATE_DATA/data.csv", sep = ";", dec = ",")
+glimpse(d)
+
+# FIT MODEL =====================================================
+
+tmax_lmmix <- lmer(yield_t ~ EVIqjan + EVIqmar +
+                      DLSTdez + DLSTjan + DLSTfev +
+                      VPDdez + NDDout + NDDmar +
+                      (1|id),
+                    data = d)  %>%
+  na.omit()
+
+# FOREST PLOT =================================================
+
+theme_set(theme_test()) 
+p <- plot_model(tmax_lmmix, transform = NULL, type = "std",
+                  show.values = TRUE, vline.color = "#ffffff", 
+                  value.offset = .35)
+
+ggsave(
+  "results/figures/crop_yield_model_forest_plot.png",
+  plot = p,
+  dpi = 300
+)
