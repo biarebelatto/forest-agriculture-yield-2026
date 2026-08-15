@@ -53,7 +53,7 @@ yield_lm <- lm(yield_t ~ EVIqjan + EVIqmar +
                 DLSTdez + DLSTjan + DLSTfev +
                 VPDdez +
                 NDDout + NDDmar,
-            data = d); summary(yield_lm)
+              data = d); summary(yield_lm)
 
 # IN-SAMPLE PERFORMANCE ====================================== 
 
@@ -73,7 +73,7 @@ loocv <- train(yield_t ~ EVIqjan + EVIqmar +
                 DLSTdez + DLSTjan + DLSTfev +
                 VPDdez +
                 NDDout + NDDmar,
-            data = d, method = "lm", trControl = ctrl)
+              data = d, method = "lm", trControl = ctrl)
 loocv
 
 loocv_results <- loocv$results
@@ -120,6 +120,7 @@ for (i in seq_along(farms)) {
 }
 
 # LOFOCV PERFORMANCE =========================================
+
 pred_vec <- unlist(predictions)
 obs_vec  <- unlist(observations)
 
@@ -136,9 +137,7 @@ r2_lofo <- 1 - (sse / sst); r2_lofo
 n <- length(obs_vec)
 p <- 8
 
-r2_adj_lofo <- 1 - (1 - r2_lofo) * ((n - 1) / (n - p - 1))
-
-r2_adj_lofo
+adj_r2_lofo <- 1 - (1 - r2_lofo) * ((n - 1) / (n - p - 1)); adj_r2_lofo
 
 performance_results <- tibble(
   evaluation = c(
@@ -164,8 +163,149 @@ performance_results <- tibble(
   adjR2 = c(
     adj_r2_lm,
     adj_r2_loocv,
-    r2_adj_lofo
+    adj_r2_lofo
   )
 )
 
 performance_results
+
+
+# ==================================================================
+# FIT LINEAR MIXED MODEL ===========================================
+
+yield_lmmix <- lmer(
+    yield_t ~ EVIqjan + EVIqmar +
+      DLSTdez + DLSTjan + DLSTfev +
+      VPDdez +
+      NDDout + NDDmar +
+      (1 | id), data = d, na.action = "na.fail")
+
+# IN-SAMPLE PERFORMANCE ====================================== 
+
+errors <- residuals(yield_lmmix)
+
+mse_lmmix <- mean((errors)^2, na.rm = TRUE); mse_lmmix 
+mae_lmmix <- mean(abs(errors), na.rm = TRUE); mae_lmmix
+rmse_lmmix <- sqrt(mse_lmmix); rmse_lmmix
+
+n <- nobs(yield_lmmix)
+p <- 8
+
+r2_conditional_lmmix <- r2_nakagawa(yield_lmmix)$R2_conditional
+adj_r2_conditional_lmmix <- 1 - (1 - r2_conditional_lmmix) * ((n - 1) / (n - p - 1)); adj_r2_conditional_lmmix
+
+# LEAVE-ONE-OUT CROSS-VALIDATION =============================
+
+n <- nrow(d)
+
+pred_loocv <- numeric(n)
+
+for (i in seq_len(n)) {
+
+  train_df <- d[-i, ]
+  test_df  <- d[i, ]
+
+  m_loocv <- lmer(
+    yield_t ~ EVIqjan + EVIqmar +
+      DLSTdez + DLSTjan + DLSTfev +
+      VPDdez +
+      NDDout + NDDmar +
+      (1 | id),
+    data = train_df
+  )
+
+  pred_loocv[i] <- predict(m_loocv, newdata = test_df)
+}
+
+obs <- d$yield_t
+
+rmse_loocv_lmmix <- sqrt(mean((obs - pred_loocv)^2)); rmse_loocv_lmmix
+mae_loocv_lmmix  <- mean(abs(obs - pred_loocv)); mae_loocv_lmmix
+
+sst <- sum((obs - mean(obs))^2)
+sse <- sum((obs - pred_loocv)^2)
+r2_loocv_lmmix <- 1 - sse/sst
+r2_loocv_lmmix
+
+p = 8 #number of predictors; 
+N <- nrow(d)
+adj_r2_loocv_lmmix = 1 - ((1 - r2_loocv_lmmix) * (N - 1)/(N - p - 1)); adj_r2_loocv_lmmix
+
+
+# LEAVE-ONE-FARM-OUT CROSS-VALIDATION ========================
+
+farms <- unique(d$id)
+
+predictions <- list()
+observations <- list()
+
+
+for (i in seq_along(farms)) {
+
+  farm_i <- farms[i]
+
+  train_df <- d %>% 
+    filter(id != farm_i)
+
+  test_df <- d %>% 
+    filter(id == farm_i)
+
+  lmm_lofo <- lmer(
+    yield_t ~ EVIqjan + EVIqmar +
+      DLSTdez + DLSTjan + DLSTfev +
+      VPDdez +
+      NDDout + NDDmar + (1 | id),
+    data = train_df
+  )
+
+  preds <- predict(lmm_lofo, newdata = test_df, re.form = NA)
+
+  predictions[[i]] <- preds
+  observations[[i]] <- test_df$yield_t
+}
+
+pred_vec <- unlist(predictions)
+obs_vec  <- unlist(observations)
+
+rmse_lofo_lmmix <- sqrt(mean((obs_vec - pred_vec)^2)); rmse_lofo_lmmix
+mae_lofo_lmmix  <- mean(abs(obs_vec - pred_vec)); mae_lofo_lmmix
+
+sst <- sum((obs_vec - mean(obs_vec))^2)
+sse <- sum((obs_vec - pred_vec)^2)
+r2_lofo_lmmix <- 1 - sse/sst
+r2_lofo_lmmix
+
+p = 8 #number of predictors; 
+N <- nrow(d)
+adj_r2_lofo_lmmix = 1 - ((1 - r2_lofo_lmmix) * (N - 1)/(N - p - 1)); adj_r2_lofo_lmmix
+
+performance_lmmix_results <- tibble(
+  evaluation = c(
+    "In-sample",
+    "LOOCV",
+    "LOFOCV"
+  ),
+  RMSE = c(
+    rmse_lmmix,
+    rmse_loocv_lmmix,
+    rmse_lofo_lmmix
+  ),
+  MAE = c(
+    mae_lmmix,
+    mae_loocv_lmmix,
+    mae_lofo_lmmix
+  ),
+  R2 = c(
+    r2_conditional_lmmix,
+    r2_loocv_lmmix,
+    r2_lofo_lmmix
+  ),
+  adjR2 = c(
+    adj_r2_conditional_lmmix,
+    adj_r2_loocv_lmmix,
+    adj_r2_lofo_lmmix
+  )
+)
+
+performance_lmmix_results
+
