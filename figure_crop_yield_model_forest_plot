@@ -35,6 +35,8 @@ pacman::p_load(dplyr, lme4, sjPlot, ggplot2)
 
 # The dataset should contain farm-level crop yield and
 # environmental predictor data required for model calibration
+
+# Expected structure:
 # observed_yield | var1 | var2 | ... | varN
 
 d <- read.csv2("PATH_TO_PRIVATE_DATA/data.csv", sep = ";", dec = ",")
