@@ -1,0 +1,119 @@
+# ============================================================
+# FIGURE
+# ============================================================
+# Observed Crop Yield — Forest Effect Across Buffer Sizes
+# ============================================================
+#
+# Purpose:
+#   Evaluate how the relationship between forest cover and
+#   observed crop yield changes across spatial buffer sizes.
+#   A separate linear model is fitted for each buffer size,
+#   and model slope and R² are summarized across scales.
+#
+# Data availability:
+#   Farm-level observed yield data and exact farm locations are
+#   not included in this repository due to data confidentiality.
+#
+# Inputs:
+#   - Farm-level observed crop yield data
+#   - Forest cover proportion for each buffer size
+#   - Buffer size
+#
+# Outputs:
+#   - Model results by buffer size
+#   - Slope across buffer sizes
+#   - R² across buffer sizes
+#
+# ============================================================
+
+remove(list=ls()) 
+graphics.off()
+options(scipen = 999)
+
+# PACKAGES ====================================================
+pacman::p_load(tidyverse, broom)
+
+# LOAD AND PREPARE DATA ======================================
+
+# Expected structure:
+# observed_yield | forest_cover_proportion | buffer_size
+
+d <- read.csv2("PATH_TO_PRIVATE_DATA/data.csv", sep = ";", dec = ",")
+glimpse(d)
+
+# FIT MODELS BY BUFFER SIZE ==================================
+
+m_buffer <- d |>
+  filter(
+    !is.na(yield_t_observado),
+    !is.na(vegProporcao)
+  ) |>
+  group_by(buffer) |>
+  group_modify(~ {
+
+    m <- lm(
+      yield_t_observado ~ vegProporcao,
+      data = .x
+    )
+
+    slope_info <- broom::tidy(m) |>
+      filter(term == "vegProporcao")
+
+    tibble(
+      r2 = summary(m)$r.squared,
+      AIC = AIC(m),
+      slope = slope_info$estimate,
+      p_slope = slope_info$p.value
+    )
+  }) |>
+  ungroup()
+glimpse(m_buffer)
+
+m_buffer$buffer <- as.numeric(str_replace(m_buffer$buffer, "km", ""))
+
+# SLOPE ACROSS BUFFER SIZES ==================================
+
+p_slope <- m_buffer %>%
+
+  ggplot(aes(x = buffer, y = slope)) +
+  geom_point(alpha = 0.6, size = 2) +
+  geom_hline(yintercept = 0.0, linetype = "dashed", linewidth = .3) +
+  scale_x_continuous(limits = c(10, 50), breaks = seq(10, 50, by = 5))+
+  labs(
+    x = "Buffer ratio (km)",
+    y = "Slope"
+  ) +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+
+p_slope
+
+# R² ACROSS BUFFER SIZES =====================================
+
+p_r2 <- m_buffer %>%
+
+  ggplot(aes(x = buffer, y = r2)) +
+  geom_point(alpha = 0.6, size = 2) +
+  scale_x_continuous(limits = c(10, 50), breaks = seq(10, 50, by = 5))+
+  labs(
+    x = "Buffer ratio (km)",
+    y = "R²"
+  ) +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+
+p_r2
+
+# SAVE OUTPUTS ===============================================
+
+ggsave(
+  "results/figures/observed_yield_forest_effect_slope_by_buffer.png",
+  plot = p_slope,
+  dpi = 300
+)
+
+ggsave(
+  "results/figures/observed_yield_forest_effect_r2_by_buffer.png",
+  plot = p_r2,
+  dpi = 300
+)
